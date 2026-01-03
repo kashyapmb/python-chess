@@ -6,14 +6,18 @@
 """
 
 import tkinter as tk
+from tkinter import PhotoImage
+from PIL import Image, ImageTk
 import random
+from sound import play_sound
+
 
 # -----------------------------
 # CONSTANTS
 # -----------------------------
 BOARD_SIZE = 8
 SQUARE_SIZE = 80
-MARGIN = 30  # space for numbers/letters
+MARGIN = 40  # space for numbers/letters
 
 # -----------------------------
 # VARIABLES
@@ -32,7 +36,7 @@ is_dragging = False
 # -----------------------------
 # Main window
 root = tk.Tk()
-root.title("Python Chess - With Move Log")
+root.title("Python Chess")
 
 # Frame for board + move log
 frame = tk.Frame(root)
@@ -62,12 +66,30 @@ move_log.config(yscrollcommand=scrollbar.set)
 # -----------------------------
 # CHESS PIECES (UNICODE)
 # -----------------------------
-pieces = {
-    "r": "♜", "n": "♞", "b": "♝", "q": "♛",
-    "k": "♚", "p": "♟",
-    "R": "♖", "N": "♘", "B": "♗", "Q": "♕",
-    "K": "♔", "P": "♙"
+SQUARE_SIZE = 80
+
+# File paths for each piece
+pieces_files = {
+    "r": "images/black-rook.png",
+    "n": "images/black-knight.png",
+    "b": "images/black-bishop.png",
+    "q": "images/black-queen.png",
+    "k": "images/black-king.png",
+    "p": "images/black-pawn.png",
+    "R": "images/white-rook.png",
+    "N": "images/white-knight.png",
+    "B": "images/white-bishop.png",
+    "Q": "images/white-queen.png",
+    "K": "images/white-king.png",
+    "P": "images/white-pawn.png",
 }
+
+# Resize images to fit inside squares
+pieces = {}
+for key, file in pieces_files.items():
+    img = Image.open(file).convert("RGBA")
+    img = img.resize((SQUARE_SIZE - 10, SQUARE_SIZE - 10), Image.Resampling.LANCZOS)  # slightly smaller than square
+    pieces[key] = ImageTk.PhotoImage(img)
 
 # -----------------------------
 # INITIAL BOARD
@@ -279,6 +301,19 @@ def computer_move():
     # Log the move
     log_move(sr, sc, tr, tc, piece)
 
+    # ---------- PLAY OPPONENT MOVE SOUND ----------
+    if piece.lower() == "k" and abs(tc - sc) == 2:
+        play_sound("castle")
+
+    elif initial_board[tr][tc] != ".":
+        play_sound("capture")
+
+    elif king_in_check("white"):
+        play_sound("check")
+
+    else:
+        play_sound("move_opponent")
+
     # Switch turn
     current_turn = "white"
     turn_label.config(text=f"{current_turn.capitalize()}'s turn")
@@ -318,11 +353,10 @@ def draw_pieces():
                     )
 
                 # Draw piece centered
-                canvas.create_text(
+                canvas.create_image(
                     MARGIN + c * SQUARE_SIZE + SQUARE_SIZE // 2,
                     r * SQUARE_SIZE + SQUARE_SIZE // 2,
-                    text=pieces[piece],
-                    font=("Arial", 32)
+                    image=pieces[piece]
                 )
 
     # Optional: highlight last move (if any)
@@ -552,6 +586,7 @@ def promote_pawn(tr, tc):
 
         def choose(new_piece):
             board[tr][tc] = new_piece
+            play_sound("promote")   # 🔊 HERE
             popup.destroy()
             # Redraw board after promotion
             canvas.delete("all")
@@ -574,6 +609,7 @@ def is_checkmate(color):
     return king_in_check(color) and not has_legal_moves(color)
 
 def show_game_over(winner):
+    play_sound("game_end")  # 🔊 HERE
     move_log.config(state='normal')
     move_log.insert(tk.END, f"\nCHECKMATE! {winner.upper()} WINS\n")
     move_log.see(tk.END)
@@ -632,12 +668,10 @@ def on_drag_start(event):
     drag_start = (row, col)
 
     # Create floating piece
-    drag_image = canvas.create_text(
+    drag_image = canvas.create_image(
         event.x,
         event.y,
-        text=pieces[piece],
-        font=("Arial", 32),
-        fill="black"
+        image=pieces[piece]
     )
 
 def on_drag_motion(event):
@@ -700,6 +734,7 @@ def on_drag_release(event):
         # --- KING SAFETY CHECK ---
         if king_in_check(current_turn):
             board[:] = backup_board
+            play_sound("illegal")   # 🔊 HERE
             reset_drag()
             redraw()
             return
@@ -728,6 +763,19 @@ def on_drag_release(event):
         # --- LOG + PROMOTION ---
         log_move(sr, sc, tr, tc, piece)
         promote_pawn(tr, tc)
+
+        # ---------- PLAY MOVE SOUND ----------
+        if piece.lower() == "k" and abs(tc - sc) == 2:
+            play_sound("castle")
+
+        elif backup_board[tr][tc] != ".":
+            play_sound("capture")
+
+        elif king_in_check("black"):
+            play_sound("check")
+
+        else:
+            play_sound("move_self")
 
         # --- SWITCH TURN ---
         current_turn = "black" if current_turn == "white" else "white"
@@ -938,4 +986,5 @@ canvas.bind("<ButtonRelease-1>", on_drag_release)
 # -----------------------------
 draw_board()
 draw_pieces()
+play_sound("game_start")
 root.mainloop()
