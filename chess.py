@@ -19,6 +19,12 @@ MARGIN = 30  # space for numbers/letters
 # VARIABLES
 # -----------------------------
 board_history = []  # stores past board states
+dragging_piece = None      # piece char e.g. "P"
+drag_start = None          # (row, col)
+drag_image = None          # canvas text ID
+is_dragging = False
+
+
 
 
 # -----------------------------
@@ -225,7 +231,7 @@ def get_all_legal_moves(color):
 
 
 def computer_move():
-    global current_turn
+    global current_turn, en_passant_target
 
     moves = get_all_legal_moves("black")
     if not moves:
@@ -602,12 +608,176 @@ def restart_game(event=None):
     draw_board()
     draw_pieces()
 
+def on_drag_start(event):
+    global dragging_piece, drag_start, drag_image, is_dragging
+    is_dragging = True
+
+    col = (event.x - MARGIN) // SQUARE_SIZE
+    row = event.y // SQUARE_SIZE
+
+    if not (0 <= row < 8 and 0 <= col < 8):
+        return
+
+    piece = board[row][col]
+    if piece == ".":
+        return
+
+    # Respect turn
+    if current_turn == "white" and is_black(piece):
+        return
+    if current_turn == "black" and is_white(piece):
+        return
+
+    dragging_piece = piece
+    drag_start = (row, col)
+
+    # Create floating piece
+    drag_image = canvas.create_text(
+        event.x,
+        event.y,
+        text=pieces[piece],
+        font=("Arial", 32),
+        fill="black"
+    )
+
+def on_drag_motion(event):
+    if drag_image:
+        canvas.coords(drag_image, event.x, event.y)
+
+def on_drag_release(event):
+    global dragging_piece, drag_start, drag_image
+    global current_turn, en_passant_target
+    global white_king_moved, black_king_moved
+    global white_rook_moved, black_rook_moved
+    global is_dragging
+
+    if not dragging_piece or not drag_start:
+        return
+
+    is_dragging = False
+
+    sr, sc = drag_start
+    tr = event.y // SQUARE_SIZE
+    tc = (event.x - MARGIN) // SQUARE_SIZE
+
+    # Remove floating piece
+    if drag_image:
+        canvas.delete(drag_image)
+
+    drag_image = None
+
+    # Out of board → cancel
+    if not (0 <= tr < 8 and 0 <= tc < 8):
+        reset_drag()
+        redraw()
+        return
+
+    piece = dragging_piece
+    backup_board = [row.copy() for row in board]
+
+    if is_legal_move(piece, sr, sc, tr, tc):
+
+        # --- MOVE PIECE ---
+        board[tr][tc] = piece
+        board[sr][sc] = "."
+
+        # --- CASTLING ---
+        if piece.lower() == "k" and abs(tc - sc) == 2:
+            if tc == 6:  # king side
+                board[tr][5] = board[tr][7]
+                board[tr][7] = "."
+            elif tc == 2:  # queen side
+                board[tr][3] = board[tr][0]
+                board[tr][0] = "."
+
+        # --- EN PASSANT CAPTURE ---
+        if piece.lower() == "p" and en_passant_target == (tr, tc):
+            if piece.isupper():
+                board[tr + 1][tc] = "."
+            else:
+                board[tr - 1][tc] = "."
+
+        # --- KING SAFETY CHECK ---
+        if king_in_check(current_turn):
+            board[:] = backup_board
+            reset_drag()
+            redraw()
+            return
+
+        # --- UPDATE CASTLING FLAGS ---
+        if piece == "K":
+            white_king_moved = True
+        elif piece == "k":
+            black_king_moved = True
+
+        if piece == "R" and sr == 7 and sc == 0:
+            white_rook_moved["left"] = True
+        elif piece == "R" and sr == 7 and sc == 7:
+            white_rook_moved["right"] = True
+
+        if piece == "r" and sr == 0 and sc == 0:
+            black_rook_moved["left"] = True
+        elif piece == "r" and sr == 0 and sc == 7:
+            black_rook_moved["right"] = True
+
+        # --- UPDATE EN PASSANT TARGET ---
+        en_passant_target = None
+        if piece.lower() == "p" and abs(tr - sr) == 2:
+            en_passant_target = ((tr + sr) // 2, tc)
+
+        # --- LOG + PROMOTION ---
+        log_move(sr, sc, tr, tc, piece)
+        promote_pawn(tr, tc)
+
+        # --- SWITCH TURN ---
+        current_turn = "black" if current_turn == "white" else "white"
+        turn_label.config(text=f"{current_turn.capitalize()}'s turn")
+
+        # --- COMPUTER MOVE ---
+        if current_turn == "black":
+            root.after(300, computer_move)
+
+    reset_drag()
+    redraw()
+
+def reset_drag():
+    global dragging_piece, drag_start
+    dragging_piece = None
+    drag_start = None
+
+def redraw():
+    canvas.delete("all")
+    draw_board()
+    draw_pieces()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # -----------------------------
 # MOUSE CLICK HANDLER
 # -----------------------------
 def on_click(event):
+
+    if is_dragging:
+        return
+    
     global selected_square, current_turn, move_number
     global white_king_moved, black_king_moved
     global white_rook_moved, black_rook_moved
@@ -755,6 +925,11 @@ root.bind("z", undo_move)
 root.bind("Z", undo_move)
 root.bind("r", restart_game)
 root.bind("R", restart_game)
+
+canvas.bind("<ButtonPress-1>", on_drag_start)
+canvas.bind("<B1-Motion>", on_drag_motion)
+canvas.bind("<ButtonRelease-1>", on_drag_release)
+
 
 
 
