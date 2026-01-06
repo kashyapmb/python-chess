@@ -27,9 +27,16 @@ def tick(game):
 
 
 def start_clock(game):
-    if not getattr(game, "clock_running", False):
+    if game.mode != "PVP":
+        # Remove clocks completely in PVC
+        game.white_clock_label.place_forget()
+        game.black_clock_label.place_forget()
+        return
+
+    if not game.clock_running:
         game.clock_running = True
         tick(game)
+
 
 
 def stop_clock(game):

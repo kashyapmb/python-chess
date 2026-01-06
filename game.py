@@ -1,4 +1,6 @@
 # game.py
+from PIL import Image, ImageTk
+
 class Game:
     def __init__(self):
         self.board = [
@@ -33,6 +35,7 @@ class Game:
         self.drag_image = None
         self.is_dragging = False
 
+
         self.root = None
         self.canvas = None
         self.turn_label = None
@@ -45,4 +48,26 @@ class Game:
         self.white_time = 0
         self.black_time = 0
         self.mode = None   # "PVC" or "PVP"
+
+        self.pieces = {}
+
+    def load_pieces(self):
+        pieces_files = {
+            "r": "images/black-rook.png",
+            "n": "images/black-knight.png",
+            "b": "images/black-bishop.png",
+            "q": "images/black-queen.png",
+            "k": "images/black-king.png",
+            "p": "images/black-pawn.png",
+            "R": "images/white-rook.png",
+            "N": "images/white-knight.png",
+            "B": "images/white-bishop.png",
+            "Q": "images/white-queen.png",
+            "K": "images/white-king.png",
+            "P": "images/white-pawn.png",
+        }
+        for key, file in pieces_files.items():
+            img = Image.open(file).convert("RGBA")
+            img = img.resize((70, 70), Image.Resampling.LANCZOS)
+            self.pieces[key] = ImageTk.PhotoImage(img, master=self.root)
 

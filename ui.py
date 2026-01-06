@@ -1,3 +1,5 @@
+#ui.py
+
 import tkinter as tk
 
 def create_ui(BOARD_SIZE, SQUARE_SIZE, MARGIN, game):
@@ -8,12 +10,14 @@ def create_ui(BOARD_SIZE, SQUARE_SIZE, MARGIN, game):
     root.title("♟ Python Chess")
     root.configure(bg="#2b2b2b")
 
-    # Window size
-    board_width = BOARD_SIZE * SQUARE_SIZE
-    board_height = BOARD_SIZE * SQUARE_SIZE
-    side_width = 260
-    window_width = MARGIN + board_width + side_width + 40
-    window_height = board_height + 40
+    board_width = BOARD_SIZE * SQUARE_SIZE + MARGIN * 2
+    board_height = BOARD_SIZE * SQUARE_SIZE + MARGIN
+
+    side_width = 320   # make side panel bigger too
+
+    window_width = board_width + side_width + 80
+    window_height = board_height + 80
+
 
     # Center window
     screen_width = root.winfo_screenwidth()
