@@ -12,32 +12,49 @@ from sound import play_sound
 from ui import create_ui
 from draw import draw_board, draw_pieces, highlight_square, show_legal_moves, redraw
 from ai import computer_move
-from helper import is_white, is_black, is_legal_move, king_in_check, is_checkmate
+from helper import (
+    is_white,
+    is_black,
+    is_legal_move,
+    king_in_check,
+    is_checkmate,
+    make_move
+)
 from game import Game
+from clock import start_clock, stop_clock, switch_clock
+
 
 # -----------------------------
 # CONSTANTS
 # -----------------------------
 BOARD_SIZE = 8
 SQUARE_SIZE = 80
-MARGIN = 40  # space for numbers/letters
+MARGIN = 40
 
 # -----------------------------
 # CREATE GAME OBJECT
 # -----------------------------
-game = Game()
+game = Game()  # Everything is stored inside game
+
+# Ensure required attributes exist
+game.selected_square = None
+game.dragging_piece = None
+game.drag_start = None
+game.drag_image = None
+game.is_dragging = False
 
 # -----------------------------
 # CREATE UI
 # -----------------------------
-root, canvas, turn_label, move_log = create_ui(BOARD_SIZE, SQUARE_SIZE, MARGIN)
+root, canvas, turn_label, move_log = create_ui(BOARD_SIZE, SQUARE_SIZE, MARGIN, game)
+
 game.root = root
 game.canvas = canvas
 game.turn_label = turn_label
 game.move_log = move_log
 
 # -----------------------------
-# LOAD PIECES IMAGES
+# LOAD PIECES
 # -----------------------------
 pieces_files = {
     "r": "images/black-rook.png",
@@ -66,12 +83,13 @@ for key, file in pieces_files.items():
 def log_move(sr, sc, tr, tc, piece):
     start = chr(ord('a') + sc) + str(8 - sr)
     end = chr(ord('a') + tc) + str(8 - tr)
-    move_text = f"{game.move_number}. {start} → {end} ({piece})\n"
 
-    game.move_log.config(state='normal')
-    game.move_log.insert(tk.END, move_text)
+    text = f"{game.move_number}. {start} → {end}\n"
+
+    game.move_log.config(state="normal")
+    game.move_log.insert(tk.END, text)
     game.move_log.see(tk.END)
-    game.move_log.config(state='disabled')
+    game.move_log.config(state="disabled")
 
     if game.current_turn == "black":
         game.move_number += 1
@@ -81,71 +99,59 @@ def log_move(sr, sc, tr, tc, piece):
 # -----------------------------
 def promote_pawn(tr, tc):
     piece = game.board[tr][tc]
-    if (piece == "P" and tr == 0) or (piece == "p" and tr == 7):
-        popup = tk.Toplevel(game.root)
-        popup.title("Promote Pawn")
-        tk.Label(popup, text="Choose promotion:", font=("Arial", 12)).pack(pady=5)
+    if not ((piece == "P" and tr == 0) or (piece == "p" and tr == 7)):
+        return
 
-        def choose(new_piece):
-            game.board[tr][tc] = new_piece
-            play_sound("promote")
-            popup.destroy()
-            redraw(game, BOARD_SIZE, SQUARE_SIZE, MARGIN, pieces)
+    popup = tk.Toplevel(game.root)
+    popup.title("Pawn Promotion")
+    popup.resizable(False, False)
 
-        options = ["Q", "R", "B", "N"] if piece.isupper() else ["q", "r", "b", "n"]
-        for p in options:
-            tk.Button(popup, text=p, font=("Arial", 24), command=lambda p=p: choose(p)).pack(side="left", padx=5, pady=5)
+    tk.Label(popup, text="Promote to:", font=("Segoe UI", 12)).pack(pady=5)
+
+    def choose(new_piece):
+        game.board[tr][tc] = new_piece
+        play_sound("promote")
+        popup.destroy()
+        redraw(game, BOARD_SIZE, SQUARE_SIZE, MARGIN, pieces)
+
+    options = ["Q", "R", "B", "N"] if piece.isupper() else ["q", "r", "b", "n"]
+    for p in options:
+        tk.Button(
+            popup,
+            text=p,
+            font=("Segoe UI", 20, "bold"),
+            width=2,
+            command=lambda p=p: choose(p)
+        ).pack(side="left", padx=5, pady=10)
 
 # -----------------------------
 # GAME OVER
 # -----------------------------
 def show_game_over(winner):
     play_sound("game_end")
-    game.move_log.config(state='normal')
-    game.move_log.insert(tk.END, f"\nCHECKMATE! {winner.upper()} WINS\n")
+    stop_clock(game)
+    game.move_log.config(state="normal")
+    game.move_log.insert(tk.END, f"\nCHECKMATE — {winner.upper()} WINS\n")
     game.move_log.see(tk.END)
-    game.move_log.config(state='disabled')
+    game.move_log.config(state="disabled")
 
 # -----------------------------
-# UNDO
-# -----------------------------
-def undo_move(event=None):
-    if game.board_history:
-        game.board = game.board_history.pop()
-        game.current_turn = "black" if game.current_turn == "white" else "white"
-        if game.current_turn == "white":
-            game.move_number = max(1, game.move_number-1)
-        game.move_log.config(state='normal')
-        game.move_log.delete("end-2l", "end-1l")
-        game.move_log.config(state='disabled')
-        redraw(game, BOARD_SIZE, SQUARE_SIZE, MARGIN, pieces)
-
-# -----------------------------
-# RESTART
-# -----------------------------
-def restart_game(event=None):
-    game.board = [row.copy() for row in game.initial_board]
-    game.current_turn = "white"
-    game.move_number = 1
-    game.board_history = []
-    game.move_log.config(state='normal')
-    game.move_log.delete(1.0, tk.END)
-    game.move_log.config(state='disabled')
-    redraw(game, BOARD_SIZE, SQUARE_SIZE, MARGIN, pieces)
-
-# -----------------------------
-# DRAG & DROP HANDLERS
+# DRAG & DROP
 # -----------------------------
 def on_drag_start(event):
     col = (event.x - MARGIN) // SQUARE_SIZE
-    row = event.y // SQUARE_SIZE
+    row = (event.y - MARGIN) // SQUARE_SIZE
+
     if not (0 <= row < 8 and 0 <= col < 8):
         return
+
     piece = game.board[row][col]
     if piece == ".":
         return
-    if game.current_turn == "white" and is_black(piece): return
-    if game.current_turn == "black" and is_white(piece): return
+    if game.current_turn == "white" and is_black(piece):
+        return
+    if game.current_turn == "black" and is_white(piece):
+        return
 
     game.dragging_piece = piece
     game.drag_start = (row, col)
@@ -157,105 +163,110 @@ def on_drag_motion(event):
         game.canvas.coords(game.drag_image, event.x, event.y)
 
 def reset_drag():
+    if game.drag_image:
+        game.canvas.delete(game.drag_image)
     game.dragging_piece = None
     game.drag_start = None
-    game.is_dragging = False
     game.drag_image = None
+    game.is_dragging = False
 
 def on_drag_release(event):
     if not game.dragging_piece or not game.drag_start:
+        reset_drag()
         return
 
     sr, sc = game.drag_start
-    tr = event.y // SQUARE_SIZE
+    tr = (event.y - MARGIN) // SQUARE_SIZE
     tc = (event.x - MARGIN) // SQUARE_SIZE
-    piece = game.dragging_piece
-    backup_board = [row.copy() for row in game.board]
 
-    if 0 <= tr < 8 and 0 <= tc < 8 and is_legal_move(game, piece, sr, sc, tr, tc):
-        # MOVE
-        from helper import make_move
+    if 0 <= tr < 8 and 0 <= tc < 8 and is_legal_move(game, game.dragging_piece, sr, sc, tr, tc):
         make_move(game, sr, sc, tr, tc)
         promote_pawn(tr, tc)
-        log_move(sr, sc, tr, tc, piece)
+        log_move(sr, sc, tr, tc, game.dragging_piece)
+
+        # PvP Clock
+        if game.mode == "PVP":
+            switch_clock(game)
+
         game.current_turn = "black" if game.current_turn == "white" else "white"
         game.turn_label.config(text=f"{game.current_turn.capitalize()}'s turn")
-        # COMPUTER MOVE
-        if game.current_turn == "black":
-            root.after(300, lambda: computer_move(game))
+
+        if is_checkmate(game, game.current_turn):
+            winner = "white" if game.current_turn == "black" else "black"
+            show_game_over(winner)
+
+        elif game.mode == "PVC" and game.current_turn != game.player_color:
+            game.root.after(300, lambda: computer_move(game))
+
     else:
-        game.board = backup_board
         play_sound("illegal")
 
     reset_drag()
     redraw(game, BOARD_SIZE, SQUARE_SIZE, MARGIN, pieces)
 
 # -----------------------------
-# MOUSE CLICK
-# -----------------------------
-def on_click(event):
-    if game.is_dragging:
-        return
-    col = (event.x - MARGIN) // SQUARE_SIZE
-    row = event.y // SQUARE_SIZE
-    if not (0 <= row < 8 and 0 <= col < 8): return
-    piece = game.board[row][col]
-
-    if game.selected_square is None:
-        if piece == ".": return
-        if game.current_turn == "white" and is_black(piece): return
-        if game.current_turn == "black" and is_white(piece): return
-        game.selected_square = (row, col)
-        redraw(game, BOARD_SIZE, SQUARE_SIZE, MARGIN, pieces)
-        highlight_square(game, row, col, SQUARE_SIZE, MARGIN)
-        show_legal_moves(game, row, col, SQUARE_SIZE, MARGIN)
-        return
-
-    # Move selected piece
-    sr, sc = game.selected_square
-    selected_piece = game.board[sr][sc]
-    if piece != "." and is_white(piece) == is_white(selected_piece):
-        game.selected_square = (row, col)
-        redraw(game, BOARD_SIZE, SQUARE_SIZE, MARGIN, pieces)
-        highlight_square(game, row, col, SQUARE_SIZE, MARGIN)
-        show_legal_moves(game, row, col, SQUARE_SIZE, MARGIN)
-        return
-
-    from helper import make_move
-    if is_legal_move(game, selected_piece, sr, sc, row, col):
-        make_move(game, sr, sc, row, col)
-        log_move(sr, sc, row, col, selected_piece)
-        promote_pawn(row, col)
-        game.current_turn = "black" if game.current_turn == "white" else "white"
-        game.turn_label.config(text=f"{game.current_turn.capitalize()}'s turn")
-        if game.current_turn == "black":
-            root.after(300, lambda: computer_move(game))
-
-        if is_checkmate(game, game.current_turn):
-            winner = "white" if game.current_turn == "black" else "black"
-            show_game_over(winner)
-
-    game.selected_square = None
-    redraw(game, BOARD_SIZE, SQUARE_SIZE, MARGIN, pieces)
-
-# -----------------------------
 # BIND EVENTS
 # -----------------------------
-canvas.bind("<Button-1>", on_click)
 canvas.bind("<ButtonPress-1>", on_drag_start)
 canvas.bind("<B1-Motion>", on_drag_motion)
 canvas.bind("<ButtonRelease-1>", on_drag_release)
-
+root.bind("z", lambda e: undo_move())
+root.bind("Z", lambda e: undo_move())
+root.bind("r", lambda e: restart_game())
+root.bind("R", lambda e: restart_game())
 root.bind("q", lambda e: root.destroy())
 root.bind("Q", lambda e: root.destroy())
-root.bind("z", undo_move)
-root.bind("Z", undo_move)
-root.bind("r", restart_game)
-root.bind("R", restart_game)
+
+# -----------------------------
+# START GAME DIALOG
+# -----------------------------
+def start_game_dialog():
+    popup = tk.Toplevel(game.root)
+    popup.title("Game Settings")
+    popup.resizable(False, False)
+    popup.grab_set()
+
+    mode_var = tk.StringVar(value="PVC")
+    color_var = tk.StringVar(value="white")
+    time_var = tk.IntVar(value=10)
+
+    tk.Label(popup, text="Game Mode").pack()
+    tk.Radiobutton(popup, text="Player vs Computer", variable=mode_var, value="PVC").pack(anchor="w")
+    tk.Radiobutton(popup, text="Player vs Player", variable=mode_var, value="PVP").pack(anchor="w")
+
+    tk.Label(popup, text="Choose Color").pack()
+    tk.Radiobutton(popup, text="White", variable=color_var, value="white").pack(anchor="w")
+    tk.Radiobutton(popup, text="Black", variable=color_var, value="black").pack(anchor="w")
+
+    tk.Label(popup, text="Time (PVP only)").pack()
+    for t in (5, 10, 15):
+        tk.Radiobutton(popup, text=f"{t} minutes", variable=time_var, value=t).pack(anchor="w")
+
+    def start():
+        game.mode = mode_var.get()
+        game.player_color = color_var.get()
+
+        if game.mode == "PVP":
+            game.white_time = time_var.get() * 60
+            game.black_time = time_var.get() * 60
+            game.clock_running = False
+            # Update clock labels
+            game.white_clock_label.config(text=f"White: {game.white_time//60:02d}:00")
+            game.black_clock_label.config(text=f"Black: {game.black_time//60:02d}:00")
+
+        popup.destroy()
+
+        if game.mode == "PVC" and game.player_color == "black":
+            game.current_turn = "white"
+            game.turn_label.config(text="White's turn")
+            game.root.after(300, lambda: computer_move(game))
+
+    tk.Button(popup, text="Start Game", command=start).pack(pady=10)
 
 # -----------------------------
 # START GAME
 # -----------------------------
 redraw(game, BOARD_SIZE, SQUARE_SIZE, MARGIN, pieces)
 play_sound("game_start")
+start_game_dialog()
 root.mainloop()

@@ -10,56 +10,74 @@ from helper import (
     king_in_check
 )
 
+# -------------------------------
+# COLORS (UI THEME)
+# -------------------------------
+LIGHT_SQUARE = "#f0d9b5"
+DARK_SQUARE = "#b58863"
+LAST_MOVE_COLOR = "#653b18"
+CHECK_COLOR = "#ff4d4d"
+LEGAL_MOVE_COLOR = "#4CAF50"
+COORD_COLOR = "white"
+
 
 def draw_board(game, BOARD_SIZE, SQUARE_SIZE, MARGIN):
     canvas = game.canvas
-    canvas.delete("all")
+    canvas.delete("board")
 
-    # Draw squares
+    # -------------------------------
+    # DRAW SQUARES
+    # -------------------------------
     for row in range(BOARD_SIZE):
         for col in range(BOARD_SIZE):
-            color = "#EEEED2" if (row + col) % 2 == 0 else "#769656"
+            color = LIGHT_SQUARE if (row + col) % 2 == 0 else DARK_SQUARE
             canvas.create_rectangle(
                 MARGIN + col * SQUARE_SIZE,
                 row * SQUARE_SIZE,
                 MARGIN + (col + 1) * SQUARE_SIZE,
                 (row + 1) * SQUARE_SIZE,
                 fill=color,
-                outline=""
+                outline="",
+                tags="board"
             )
 
-    # Vertical margin line
-    canvas.create_line(
-        MARGIN, 0,
-        MARGIN, BOARD_SIZE * SQUARE_SIZE,
-        width=2
-    )
-
-    # Horizontal margin line
-    canvas.create_line(
+    # -------------------------------
+    # BORDER LINES
+    # -------------------------------
+    canvas.create_rectangle(
         MARGIN,
-        BOARD_SIZE * SQUARE_SIZE,
+        0,
         MARGIN + BOARD_SIZE * SQUARE_SIZE,
         BOARD_SIZE * SQUARE_SIZE,
-        width=2
+        outline="#222222",
+        width=2,
+        tags="board"
     )
 
-    # Row numbers (8–1)
+    # -------------------------------
+    # ROW NUMBERS (8–1) → WHITE
+    # -------------------------------
     for row in range(BOARD_SIZE):
         canvas.create_text(
             MARGIN // 2,
             row * SQUARE_SIZE + SQUARE_SIZE // 2,
-            text=str(8 - row),
-            font=("Arial", 12, "bold")
+            text=str(BOARD_SIZE - row),
+            font=("Segoe UI", 12, "bold"),
+            fill=COORD_COLOR,
+            tags="board"
         )
 
-    # Column letters (a–h)
+    # -------------------------------
+    # COLUMN LETTERS (a–h) → WHITE
+    # -------------------------------
     for col in range(BOARD_SIZE):
         canvas.create_text(
             MARGIN + col * SQUARE_SIZE + SQUARE_SIZE // 2,
             BOARD_SIZE * SQUARE_SIZE + MARGIN // 2,
             text=chr(ord("a") + col),
-            font=("Arial", 12, "bold")
+            font=("Segoe UI", 12, "bold"),
+            fill=COORD_COLOR,
+            tags="board"
         )
 
 
@@ -67,31 +85,9 @@ def draw_pieces(game, pieces, SQUARE_SIZE, MARGIN):
     canvas = game.canvas
     board = game.board
 
-    for r in range(8):
-        for c in range(8):
-            piece = board[r][c]
-            if piece == ".":
-                continue
-
-            # Highlight king in check
-            if (piece == "K" and king_in_check(game, "white")) or \
-               (piece == "k" and king_in_check(game, "black")):
-                canvas.create_rectangle(
-                    MARGIN + c * SQUARE_SIZE,
-                    r * SQUARE_SIZE,
-                    MARGIN + (c + 1) * SQUARE_SIZE,
-                    (r + 1) * SQUARE_SIZE,
-                    outline="red",
-                    width=3
-                )
-
-            canvas.create_image(
-                MARGIN + c * SQUARE_SIZE + SQUARE_SIZE // 2,
-                r * SQUARE_SIZE + SQUARE_SIZE // 2,
-                image=pieces[piece]
-            )
-
-    # Highlight last move
+    # -------------------------------
+    # LAST MOVE HIGHLIGHT (DRAW FIRST)
+    # -------------------------------
     if game.board_history:
         last_board = game.board_history[-1]
         for r in range(8):
@@ -102,12 +98,39 @@ def draw_pieces(game, pieces, SQUARE_SIZE, MARGIN):
                         r * SQUARE_SIZE,
                         MARGIN + (c + 1) * SQUARE_SIZE,
                         (r + 1) * SQUARE_SIZE,
-                        outline="blue",
-                        width=2
+                        fill=LAST_MOVE_COLOR,
+                        outline=""
                     )
 
+    # -------------------------------
+    # DRAW PIECES (ON TOP)
+    # -------------------------------
+    for r in range(8):
+        for c in range(8):
+            piece = board[r][c]
+            if piece == ".":
+                continue
 
-def highlight_square(game, row, col, SQUARE_SIZE, MARGIN, color="#ADD8E6"):
+            # King in check highlight
+            if (piece == "K" and king_in_check(game, "white")) or \
+               (piece == "k" and king_in_check(game, "black")):
+                canvas.create_rectangle(
+                    MARGIN + c * SQUARE_SIZE,
+                    r * SQUARE_SIZE,
+                    MARGIN + (c + 1) * SQUARE_SIZE,
+                    (r + 1) * SQUARE_SIZE,
+                    outline=CHECK_COLOR,
+                    width=4
+                )
+
+            canvas.create_image(
+                MARGIN + c * SQUARE_SIZE + SQUARE_SIZE // 2,
+                r * SQUARE_SIZE + SQUARE_SIZE // 2,
+                image=pieces[piece]
+            )
+
+
+def highlight_square(game, row, col, SQUARE_SIZE, MARGIN, color="#a6dcef"):
     game.canvas.create_rectangle(
         MARGIN + col * SQUARE_SIZE,
         row * SQUARE_SIZE,
@@ -125,11 +148,11 @@ def show_legal_moves(game, sr, sc, SQUARE_SIZE, MARGIN):
         for c in range(8):
             if is_legal_move(game, piece, sr, sc, r, c):
                 game.canvas.create_oval(
-                    MARGIN + c * SQUARE_SIZE + 30,
-                    r * SQUARE_SIZE + 30,
-                    MARGIN + c * SQUARE_SIZE + 50,
-                    r * SQUARE_SIZE + 50,
-                    fill="green",
+                    MARGIN + c * SQUARE_SIZE + 26,
+                    r * SQUARE_SIZE + 26,
+                    MARGIN + c * SQUARE_SIZE + SQUARE_SIZE - 26,
+                    r * SQUARE_SIZE + SQUARE_SIZE - 26,
+                    fill=LEGAL_MOVE_COLOR,
                     outline=""
                 )
 

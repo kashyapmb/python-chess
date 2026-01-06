@@ -4,6 +4,7 @@
 # ===============================
 
 import random
+from draw import redraw
 from helper import (
     is_white,
     is_black,
@@ -81,7 +82,57 @@ def choose_best_move(game, color):
             game.black_rook_moved.copy()
         )
 
-        make_move(game, sr, sc, tr, tc)
+        """
+        Executes a move from (sr, sc) to (tr, tc) on the game.board.
+        Handles normal moves, en passant, and castling.
+        """
+        piece = game.board[sr][sc]
+        target = game.board[tr][tc]
+
+        # Normal move
+        game.board[tr][tc] = piece
+        game.board[sr][sc] = "."
+
+        # Castling
+        if piece.lower() == "k" and abs(tc - sc) == 2:
+            row = sr
+            if tc == 6:  # King-side
+                game.board[row][5] = game.board[row][7]
+                game.board[row][7] = "."
+            elif tc == 2:  # Queen-side
+                game.board[row][3] = game.board[row][0]
+                game.board[row][0] = "."
+
+        # En passant
+        if piece.lower() == "p" and game.en_passant_target == (tr, tc) and target == ".":
+            if piece.isupper():
+                game.board[tr + 1][tc] = "."
+            else:
+                game.board[tr - 1][tc] = "."
+
+        # Update castling flags
+        if piece == "K":
+            game.white_king_moved = True
+        elif piece == "k":
+            game.black_king_moved = True
+
+        if piece == "R" and sr == 7 and sc == 0:
+            game.white_rook_moved["left"] = True
+        elif piece == "R" and sr == 7 and sc == 7:
+            game.white_rook_moved["right"] = True
+        elif piece == "r" and sr == 0 and sc == 0:
+            game.black_rook_moved["left"] = True
+        elif piece == "r" and sr == 0 and sc == 7:
+            game.black_rook_moved["right"] = True
+
+        # Update en passant target
+        game.en_passant_target = None
+        if piece.lower() == "p" and abs(tr - sr) == 2:
+            game.en_passant_target = ((tr + sr) // 2, tc)
+
+            
+
+            
 
         score = evaluate_board(game)
         if color == "black":
@@ -110,24 +161,19 @@ def choose_best_move(game, color):
 
 
 def computer_move(game):
-    """
-    Executes the AI move for the current player
-    """
     color = game.current_turn
 
     if is_checkmate(game, color):
         return
 
     move = choose_best_move(game, color)
-    if move is None:
+    if not move:
         return
 
     sr, sc, tr, tc = move
-
-    # Save board for history
-    game.board_history.append([row.copy() for row in game.board])
-
     make_move(game, sr, sc, tr, tc)
 
-    # Switch turn
     game.current_turn = "black" if color == "white" else "white"
+    game.turn_label.config(text=f"{game.current_turn.capitalize()}'s turn")
+
+    redraw(game, 8, 80, 40, game.pieces)
